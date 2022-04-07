@@ -15,7 +15,13 @@ class ReferenceStation():
             coordinate's number.
             Set the current time.
         """
+        
         rospy.init_node("ref_coord_publisher")
+        
+        # Publisher initialization part for ReferenceStation
+        self.ref_coord_pub = rospy.Publisher("/gnss/ref/fix_mean", NavSatFix, queue_size=10)
+        self.ref_coord_err_pub = rospy.Publisher("/gnss/ref/error", Float64MultiArray, queue_size=1)
+        
 
         # Mean values
         self.received_number = 1
@@ -24,35 +30,32 @@ class ReferenceStation():
             0.0, # self.mean_long
             0.0  # self.mean_alt
         ]
-
-        self.current_time = rospy.Time.now()
-
-        # Publisher part
-        self.ref_coord_pub = rospy.Publisher("/gnss/ref/fix_mean", NavSatFix, queue_size=10)
-        self.ref_coord_err_pub = rospy.Publisher("/gnss/ref/error", Float64MultiArray, queue_size=1)
-
-        # Subscriber part
-        rospy.Subscriber("/fix", NavSatFix, self.mean_updater)  # /gnss/ref/fix
-        rospy.Subscriber("/fix", NavSatFix, self.difference_calculator)  # /gnss/ref/fix
-
-    
-    def mean_updater(self, data):
-        """ 
-            Updates the mean of lat, long, alt
-
-            Publishes mean of lat, long, alt of reference station
-        """
-        counter = 0
+        
+        
+    def mean_update_and_calculate_error(self, data):
+        
+        
         self.instant_coords = [
             data.latitude, # in degrees
             data.longitude, # in degrees
             data.altitude # in meters
             ]
-
+        
+        self.error_list = [
+            # reference mean lat - reference instant lat,
+            # reference mean long - reference instant long,
+            # reference mean alt - reference instant alt
+        ]
+        
+        
+        counter = 0
         for coord in self.instant_coords:
             self.mean_coords[counter] = (self.mean_coords[counter] + coord) / self.received_number
-            counter+=1
-        
+            self.error_list.append(self.mean_coords[counter] - coord)
+            counter+=
+            
+            
+            
         # Create NavSatFix message
         self.ref_nav = NavSatFix()
         self.ref_nav.header.stamp = self.current_time
@@ -65,35 +68,75 @@ class ReferenceStation():
             0, 0, 0
         ]
         
-        # Publish the message
+        # Create Float64MultiArray message
+        self.ref_coord_err = Float64MultiArray()
+        self.ref_coord_err.data = self.error_list
+        
+        # Publish
+        self.ref_coord_err_pub.publish(self.ref_coord_err)
         self.ref_coord_pub.publish(self.ref_nav)
 
 
+    
+    # def mean_updater(self, data):
+    #     """ 
+    #         Updates the mean of lat, long, alt
 
-    def difference_calculator(self, data):
-        """ 
-            Calculates the differences between each data
-            and mean of coordinates.
+    #         Publishes mean of lat, long, alt of reference station
+    #     """
+    #     counter = 0
+    #     self.instant_coords = [
+    #         data.latitude, # in degrees
+    #         data.longitude, # in degrees
+    #         data.altitude # in meters
+    #         ]
 
-            Publishes lat, long, alt differences at the reference station
-        """
-        self.difference_list = [
-            # reference mean lat - reference instant lat,
-            # reference mean long - reference instant long,
-            # reference mean alt - reference instant alt
-        ]
-        counter = 0
-
-        for coord in self.instant_coords:
-            self.difference_list.append(self.mean_coords[counter] - coord)
-            counter+=1
+    #     for coord in self.instant_coords:
+    #         self.mean_coords[counter] = (self.mean_coords[counter] + coord) / self.received_number
+    #         counter+=1
         
-        self.ref_coord_dif = Float64MultiArray()
-        self.ref_coord_dif.data = self.difference_list
-        self.ref_coord_err_pub.publish(self.ref_coord_dif)
+    #     # Create NavSatFix message
+    #     self.ref_nav = NavSatFix()
+    #     self.ref_nav.header.stamp = self.current_time
+    #     self.ref_nav.latitude = self.mean_coords[0]
+    #     self.ref_nav.longitude = self.mean_coords[1]
+    #     self.ref_nav.altitude = self.mean_coords[2]
+    #     self.ref_nav.position_covariance = [
+    #         0, 0, 0,
+    #         0, 0, 0,
+    #         0, 0, 0
+    #     ]
+    
+        
+    #     # Publish the message
+    #     self.ref_coord_pub.publish(self.ref_nav)
 
-        # Return to use in RoverStation class
-        return self.ref_coord_dif
+
+
+    # def difference_calculator(self, data):
+    #     """ 
+    #         Calculates the differences between each data
+    #         and mean of coordinates.
+
+    #         Publishes lat, long, alt differences at the reference station
+    #     """
+    #     self.difference_list = [
+    #         # reference mean lat - reference instant lat,
+    #         # reference mean long - reference instant long,
+    #         # reference mean alt - reference instant alt
+    #     ]
+    #     counter = 0
+
+    #     for coord in self.instant_coords:
+    #         self.difference_list.append(self.mean_coords[counter] - coord)
+    #         counter+=1
+        
+    #     self.ref_coord_err = Float64MultiArray()
+    #     self.ref_coord_err.data = self.difference_list
+    #     self.ref_coord_err_pub.publish(self.ref_coord_dif)
+
+    #     # Return to use in RoverStation class
+    #     return self.ref_coord_dif
 
 
 
@@ -106,11 +149,11 @@ class RoverStation():
         self.reference = ReferenceStation()
 
         #rospy.init_node("rover_coord_publisher")
-        self.current_time = rospy.Time.now()
+        
 
         self.rover_coord_pub = rospy.Publisher("/gnss/rover/fix_corrected", NavSatFix, queue_size=10)
-
-        rospy.Subscriber("/ublox_gps/fix", NavSatFix, self.coordinate_corrector) # /gnss/rover/fix
+        
+        self.rover_nav = NavSatFix()
 
     
 
@@ -125,7 +168,7 @@ class RoverStation():
         # Take the correction values from Reference Station class
         # [lat, long, alt]
         correction_values = reference.difference_calculator()
-        self.rover_nav = NavSatFix()
+        self.current_time = rospy.Time.now()
         self.rover_nav.header.stamp = self.current_time
         self.rover_nav.header.frame_id = "base_link"
         self.rover_nav.latitude = data.latitude - correction_values[0]
@@ -136,14 +179,30 @@ class RoverStation():
             0, 0, 0,
             0, 0, 0
         ]
-        self.rover_coord_pub.publish(self.rover_nav)
+        
+        self.rover_coord_pub.publish(rover_nav)
+
 
 
 if __name__ == "__main__":
     try:
+        
+        # Object registrations
+        reference_station = ReferenceStation()
+        rover_station = RoverStation()
+        
+        
         while not rospy.is_shutdown():
-            ReferenceStation()
-            RoverStation()
-
+            
+            # Time
+            current_time = rospy.Time.now()
+            
+            # Subscriber part for RoverStation
+            rospy.Subscriber("/ublox_gps/fix", NavSatFix, rover_station.coordinate_corrector) # /gnss/rover/fix
+            rospy.Subscriber("/fix", NavSatFix, rover_station.mean_updater)  # /gnss/ref/fix
+            rospy.Subscriber("/fix", NavSatFix, rover_station.difference_calculator)  # /gnss/ref/fix
+        
+            
+            
     except rospy.ROSInterruptException:
         pass
