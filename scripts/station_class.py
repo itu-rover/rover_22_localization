@@ -14,18 +14,18 @@ class ReferenceStation():
             Set the initial values of mean coordinates and 
             coordinate's number.
             Set the current time.
+        
         """
         
-        rospy.init_node("gnss_business")
         
         # Publisher initialization part for ReferenceStation
         self.ref_coord_pub = rospy.Publisher("/gnss/ref/fix_mean", NavSatFix, queue_size=10)
-        self.ref_coord_err_pub = rospy.Publisher("/gnss/ref/error", Float64MultiArray, queue_size=1)
+        self.ref_coord_err_pub = rospy.Publisher("/gnss/ref/error", Float64MultiArray, queue_size=10)
         
 
         # Mean values
-        self.received_number = 1
-        self.init_coords = [
+        self.received_message = 1
+        self.mean_coords = [
             0.0, # self.mean_lat
             0.0, # self.mean_long
             0.0  # self.mean_alt
@@ -33,28 +33,33 @@ class ReferenceStation():
         
         
     def mean_update_and_calculate_error(self, data):
+        """
+            Gets the instant coordinates of reference station.
+            
+            
+        """
         
-        
-        self.instant_coords = [
+        self.ref_instant_coords = [
             data.latitude, # in degrees
             data.longitude, # in degrees
             data.altitude # in meters
             ]
-        print("instant: " + str(self.instant_coords))
+        print("reference instant: " + str(self.instant_coords))
 
         self.mean_coords = [
-            (self.mean_coords[0] + self.instant_coords[0]) / self.received_number,
-            (self.mean_coords[1] + self.instant_coords[1]) / self.received_number,
-            (self.mean_coords[2] + self.instant_coords[2]) / self.received_number
+            (self.mean_coords[0]*(self.received_message-1) + self.ref_instant_coords[0]) / self.received_message,
+            (self.mean_coords[1]*(self.received_message-1) + self.ref_instant_coords[1]) / self.received_message,
+            (self.mean_coords[2]*(self.received_message-1) + self.ref_instant_coords[2]) / self.received_message
         ]
-        print("mean: " + str(self.mean_coords))
+        print("reference mean: " + str(self.mean_coords))
+        print("received_message: " + str(self.received_message))
         
         self.error_list = [
-            self.mean_coords[0] - self.instant_coords[0], # reference mean lat - reference instant lat,
-            self.mean_coords[1] - self.instant_coords[1], # reference mean long - reference instant long,
-            self.mean_coords[2] - self.instant_coords[2], # reference mean alt - reference instant alt
+            self.mean_coords[0] - self.ref_instant_coords[0], # reference mean lat - reference instant lat,
+            self.mean_coords[1] - self.ref_instant_coords[1], # reference mean long - reference instant long,
+            self.mean_coords[2] - self.ref_instant_coords[2], # reference mean alt - reference instant alt
         ]
-        print("error: " + str(self.error_list))
+        print("reference error: " + str(self.error_list))
         print("----------------")
         print("----------------")
         
@@ -64,7 +69,7 @@ class ReferenceStation():
         #     self.error_list.append(self.mean_coords[counter] - coord)
         #     counter+=1
         
-        self.received_number+=1
+        self.received_message+=1
         
         # Create NavSatFix message
         self.ref_nav = NavSatFix()
@@ -99,14 +104,31 @@ class RoverStation():
             
         """
 
-        #rospy.init_node("rover_coord_publisher")
+        self.corrected_rover_nav = NavSatFix()
+        self.instant_rover_nav = NavSatFix()
         
 
         self.rover_coord_pub = rospy.Publisher("/gnss/rover/fix_corrected", NavSatFix, queue_size=10)
+        
+    def rover_instant_position(self, data):
+        """ 
+            Gets the instant position data of rover.
+        
+            Updates the created NavSatFix msg for the
+            instant coordinates.
+        """
+        self.instant_rover_nav.header.stamp = current_time
+        self.instant_rover_nav.header.frame_id = ""
+        self.instant_rover_nav.latitude = data.latitude
+        self.instant_rover_nav.longitude = data.longitude
+        self.instant_rover_nav.altitude = data.altitude
+        self.instant_rover_nav.position_covariance = data.position_covariance
     
 
     def coordinate_corrector(self, data):
         """ 
+            Gets the error values comes from reference station.
+        
             Makes the coordinate corrections comes from
             the reference stations.
             
@@ -115,20 +137,18 @@ class RoverStation():
 
         # Take the correction values from Reference Station class
         # [lat, long, alt]
-        self.rover_nav = NavSatFix()
-        self.current_time = current_time
-        self.rover_nav.header.stamp = self.current_time
-        self.rover_nav.header.frame_id = "base_link"
-        self.rover_nav.latitude = data.latitude - data.data[0]
-        self.rover_nav.longitude = data.longitude - data.data[1]
-        self.rover_nav.altitude = data.altitude - data.data[2]
-        self.rover_nav.position_covariance = [
+        self.corrected_rover_nav.header.stamp = current_time
+        self.corrected_rover_nav.header.frame_id = "base_link"
+        self.corrected_rover_nav.latitude = self.instant_rover_nav.latitude - data.data[0]
+        self.corrected_rover_nav.longitude = self.instant_rover_nav.longitude - data.data[1]
+        self.corrected_rover_nav.altitude = self.instant_rover_nav.altitude - data.data[2]
+        self.corrected_rover_nav.position_covariance = [
             0, 0, 0,
             0, 0, 0,
             0, 0, 0
         ]
         
-        self.rover_coord_pub.publish(rover_nav)
+        self.rover_coord_pub.publish(self.corrected_rover_nav)
 
 
 
@@ -136,21 +156,23 @@ class RoverStation():
 
 
 if __name__ == "__main__":
+    
     try:
+        # Initialize Node
+        rospy.init_node("gnss_business")
+        
+        # Time
+        current_time = rospy.Time.now()
         
         # Object registrations
         reference_station = ReferenceStation()
         rover_station = RoverStation()
         
+        rospy.Subscriber("/ublox_gps/fix", NavSatFix, reference_station.mean_update_and_calculate_error)  
+        rospy.Subscriber("/fix", NavSatFix, rover_station.rover_instant_position)
+        rospy.Subscriber("/gnss/ref/error", Float64MultiArray, rover_station.coordinate_corrector)
         
-        while not rospy.is_shutdown():
-            
-            # Time
-            current_time = rospy.Time.now()
-            
-            # Subscriber part for RoverStation
-            rospy.Subscriber("/ublox_gps/fix", NavSatFix, reference_station.mean_update_and_calculate_error)  
-            rospy.Subscriber("/gnss/ref/error", NavSatFix, rover_station.coordinate_corrector)
+        rospy.spin()
             
             
     except rospy.ROSInterruptException:
