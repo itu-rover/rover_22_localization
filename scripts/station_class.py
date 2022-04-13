@@ -23,7 +23,7 @@ class ReferenceStation():
         self.ref_coord_err_pub = rospy.Publisher("/gnss/ref/error", Float64MultiArray, queue_size=10)
         
 
-        # Mean values
+        # Mean values/gnss/ref/fix_mean/gnss/ref/fix_mean/gnss/ref/fix_mean
         self.received_message = 1
         self.mean_coords = [
             0.0, # self.mean_lat
@@ -44,7 +44,7 @@ class ReferenceStation():
             data.longitude, # in degrees
             data.altitude # in meters
             ]
-        print("reference instant: " + str(self.instant_coords))
+        print("reference instant: " + str(self.ref_instant_coords))
 
         self.mean_coords = [
             (self.mean_coords[0]*(self.received_message-1) + self.ref_instant_coords[0]) / self.received_message,
