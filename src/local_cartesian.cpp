@@ -63,6 +63,45 @@ void rover_corrected_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
 };
 
 
+void gps_odometry_publisher_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
+{
+    if (counter==1)
+    {
+        GeographicLib::LocalCartesian locart(msg->latitude, msg->longitude, msg->altitude, earth);
+    }
+    counter++;
+    locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
+
+    nav_msgs::Odometry gps_odom_msg;
+    gps_odom_msg.header.stamp = ros::Time::now();
+    gps_odom_msg.header.frame_id = "base_link";
+    gps_odom_msg.pose.pose.position.x = x;
+    gps_odom_msg.pose.pose.position.y = y;
+    gps_odom_msg.pose.pose.position.z = z;
+    gps_odom_msg.pose.pose.orientation.x = 0;  // take this from IMU
+    gps_odom_msg.pose.pose.orientation.y = 0;  // take this from IMU
+    gps_odom_msg.pose.pose.orientation.z = 0;  // take this from IMU
+    gps_odom_msg.pose.pose.orientation.w = 1;  // take this from IMU
+    gps_odom_msg.pose.covariance = {
+        0, 0, 0,
+        0, 0, 0,
+        0, 0, 0
+    };
+    gps_odom_msg.twist.twist.angular.x = 0;
+    gps_odom_msg.twist.twist.angular.y = 0;
+    gps_odom_msg.twist.twist.angular.z = 0;
+    gps_odom_msg.twist.twist.linear.x = 0;
+    gps_odom_msg.twist.twist.linear.y = 0;
+    gps_odom_msg.twist.twist.linear.z = 0;
+    gps_odom_msg.twist.covariance = {
+        0, 0, 0,
+        0, 0, 0,
+        0, 0, 0
+    };
+
+    gps_odometry_pub.publish(gps_odom_msg);
+
+}
 
 
 int main(int argc, char **argv)
@@ -70,15 +109,18 @@ int main(int argc, char **argv)
 
     ros::init(argc, argv, "local_cartesian");
     ros::NodeHandle n;
+
+    int counter = 1;
     
     ros::Publisher local_cartesian_pub = n.advertise<sensor_msgs::NavSatFix>("local_cartesian_publisher", 10);
 
     ros::Rate loop_rate(10);
 
     
-    ros::Subscriber ref_mean_sub = n.subscribe("/gnss/ref/fix_mean", 1000, ref_mean_callback);
-    ros::Subscriber ref_error_sub = n.subscribe("/gnss/ref/error", 1000, ref_error_callback);
-    ros::Subscriber rover_corrected_sub = n.subscribe("/gnss/rover/fix_corrected", 1000, rover_corrected_callback);
+    // ros::Subscriber ref_mean_sub = n.subscribe("/gnss/ref/fix_mean", 1000, ref_mean_callback);
+    // ros::Subscriber ref_error_sub = n.subscribe("/gnss/ref/error", 1000, ref_error_callback);
+    // ros::Subscriber rover_corrected_sub = n.subscribe("/gnss/rover/fix_corrected", 1000, rover_corrected_callback);
+    ros::Subscriber gps_odometry_sub = n.subscribe("/fix", 1000, gps_odometry_publisher_callback);
 
     ros::spin();
 
