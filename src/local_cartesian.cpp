@@ -11,7 +11,13 @@
 
 GeographicLib::Geocentric earth(GeographicLib::Constants::WGS84_a(), GeographicLib::Constants::WGS84_f());
 
+GeographicLib::LocalCartesian locart;
+
 double x, y, z;
+
+int counter = 1;
+
+ros::Publisher gps_odometry_pub;
 
 
 void ref_mean_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
@@ -67,7 +73,7 @@ void gps_odometry_publisher_callback(const sensor_msgs::NavSatFix::ConstPtr& msg
 {
     if (counter==1)
     {
-        GeographicLib::LocalCartesian locart(msg->latitude, msg->longitude, msg->altitude, earth);
+        locart=GeographicLib::LocalCartesian(msg->latitude, msg->longitude, msg->altitude, earth);
     }
     counter++;
     locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
@@ -109,10 +115,9 @@ int main(int argc, char **argv)
 
     ros::init(argc, argv, "local_cartesian");
     ros::NodeHandle n;
-
-    int counter = 1;
     
     ros::Publisher local_cartesian_pub = n.advertise<sensor_msgs::NavSatFix>("local_cartesian_publisher", 10);
+    gps_odometry_pub = n.advertise<nav_msgs::Odometry>("gps_odometry_publisher", 10);
 
     ros::Rate loop_rate(10);
 
