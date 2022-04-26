@@ -4,6 +4,7 @@
 #include "std_msgs/Float64MultiArray.h"
 #include "sensor_msgs/NavSatFix.h"
 #include "nav_msgs/Odometry.h"
+#include "geometry_msgs/TwistWithCovarianceStamped.h"
 
 #include <GeographicLib/LocalCartesian.hpp>
 #include <GeographicLib/Geocentric.hpp>
@@ -18,6 +19,9 @@ double x, y, z;
 int counter = 1;
 
 ros::Publisher gps_odometry_pub;
+ros::Publisher gps_odometry_vel_pub;
+
+nav_msgs::Odometry gps_odom_msg;
 
 
 void ref_mean_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
@@ -78,7 +82,6 @@ void gps_odometry_publisher_callback(const sensor_msgs::NavSatFix::ConstPtr& msg
     counter++;
     locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
 
-    nav_msgs::Odometry gps_odom_msg;
     gps_odom_msg.header.stamp = ros::Time::now();
     gps_odom_msg.header.frame_id = "base_link";
     gps_odom_msg.pose.pose.position.x = x;
@@ -88,23 +91,27 @@ void gps_odometry_publisher_callback(const sensor_msgs::NavSatFix::ConstPtr& msg
     gps_odom_msg.pose.pose.orientation.y = 0;  // take this from IMU
     gps_odom_msg.pose.pose.orientation.z = 0;  // take this from IMU
     gps_odom_msg.pose.pose.orientation.w = 1;  // take this from IMU
-    gps_odom_msg.pose.covariance = {
-        0, 0, 0,
-        0, 0, 0,
-        0, 0, 0
-    };
-    gps_odom_msg.twist.twist.angular.x = 0;
-    gps_odom_msg.twist.twist.angular.y = 0;
-    gps_odom_msg.twist.twist.angular.z = 0;
-    gps_odom_msg.twist.twist.linear.x = 0;
-    gps_odom_msg.twist.twist.linear.y = 0;
-    gps_odom_msg.twist.twist.linear.z = 0;
-    gps_odom_msg.twist.covariance = {
-        0, 0, 0,
-        0, 0, 0,
-        0, 0, 0
-    };
+    // gps_odom_msg.pose.covariance = msg->position_covariance;
+    // {
+    //     0, 0, 0,
+    //     0, 0, 0,
+    //     0, 0, 0
+    // };
+    // gps_odometry_pub.publish(gps_odom_msg);
 
+}
+
+
+
+void gps_odometry_vel_publisher_callback(const geometry_msgs::TwistWithCovarianceStamped::ConstPtr& msg)
+{
+    gps_odom_msg.twist.twist.angular.x = msg->twist.twist.angular.x;
+    gps_odom_msg.twist.twist.angular.y = msg->twist.twist.angular.y;
+    gps_odom_msg.twist.twist.angular.z = msg->twist.twist.angular.z;
+    gps_odom_msg.twist.twist.linear.x = msg->twist.twist.linear.x;
+    gps_odom_msg.twist.twist.linear.y = msg->twist.twist.linear.y;
+    gps_odom_msg.twist.twist.linear.z = msg->twist.twist.linear.z;
+    gps_odom_msg.twist.covariance = msg->twist.covariance;
     gps_odometry_pub.publish(gps_odom_msg);
 
 }
@@ -117,7 +124,7 @@ int main(int argc, char **argv)
     ros::NodeHandle n;
     
     ros::Publisher local_cartesian_pub = n.advertise<sensor_msgs::NavSatFix>("local_cartesian_publisher", 10);
-    gps_odometry_pub = n.advertise<nav_msgs::Odometry>("gps_odometry_publisher", 10);
+    gps_odometry_pub = n.advertise<nav_msgs::Odometry>("/odometry/gps", 10);
 
     ros::Rate loop_rate(10);
 
@@ -125,7 +132,8 @@ int main(int argc, char **argv)
     // ros::Subscriber ref_mean_sub = n.subscribe("/gnss/ref/fix_mean", 1000, ref_mean_callback);
     // ros::Subscriber ref_error_sub = n.subscribe("/gnss/ref/error", 1000, ref_error_callback);
     // ros::Subscriber rover_corrected_sub = n.subscribe("/gnss/rover/fix_corrected", 1000, rover_corrected_callback);
-    ros::Subscriber gps_odometry_sub = n.subscribe("/fix", 1000, gps_odometry_publisher_callback);
+    ros::Subscriber gps_odometry_sub = n.subscribe("/ublox_gps/fix", 1000, gps_odometry_publisher_callback);
+    ros::Subscriber gps_odometry_vel_sub = n.subscribe("/ublox_gps/fix_velocity", 1000, gps_odometry_vel_publisher_callback);
 
     ros::spin();
 
