@@ -10,13 +10,22 @@
 #include <GeographicLib/Geocentric.hpp>
 
 
+#define R1 4            // number of rows in Matrix-1
+#define C1 4            // number of columns in Matrix-1
+#define R2 4            // number of rows in Matrix-2
+#define C2 4            // number of columns in Matrix-2
+
+
 GeographicLib::Geocentric earth(GeographicLib::Constants::WGS84_a(), GeographicLib::Constants::WGS84_f());
 
 GeographicLib::LocalCartesian locart;
 
-double x, y, z;
+double x, y, z;  // origin point values for gps odometry
 
-int counter = 1;
+int counter = 1;  // counter for gps odometry coordinate system origin
+
+std::vector<float> gps_xyz;
+std::vector<float> imu_xyz;
 
 ros::Publisher gps_odometry_pub;
 ros::Publisher gps_odometry_vel_pub;
@@ -24,53 +33,57 @@ ros::Publisher gps_odometry_vel_pub;
 nav_msgs::Odometry gps_odom_msg;
 
 
-void ref_mean_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
-{
-    GeographicLib::LocalCartesian locart(0, 0, 0, earth);
+// void ref_mean_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
+// {
+//     GeographicLib::LocalCartesian locart(0, 0, 0, earth);
 
-    locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
+//     locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
 
-    // std::cout << " Mean :  -- X : " << x
-    //         << " -- Y : " << y <<
-    //         " -- Z : " << z << 
-    //         std::endl;
+//     // std::cout << " Mean :  -- X : " << x
+//     //         << " -- Y : " << y <<
+//     //         " -- Z : " << z << 
+//     //         std::endl;
 
-};
+// };
 
-void ref_error_callback(const std_msgs::Float64MultiArray::ConstPtr& msg)
-{
-    GeographicLib::LocalCartesian locart(0, 0, 0, earth);
+// void ref_error_callback(const std_msgs::Float64MultiArray::ConstPtr& msg)
+// {
+//     GeographicLib::LocalCartesian locart(0, 0, 0, earth);
 
-    locart.Forward(msg->data[0], msg->data[1], msg->data[2], x, y, z);
+//     locart.Forward(msg->data[0], msg->data[1], msg->data[2], x, y, z);
 
-    // double displacement = std::sqrt(std::pow(x,2) + std::pow(y,2) + std::pow(z,2));
-    double eucledian_error = std::sqrt(std::pow(x,2) + std::pow(y,2));
+//     // double displacement = std::sqrt(std::pow(x,2) + std::pow(y,2) + std::pow(z,2));
+//     double eucledian_error = std::sqrt(std::pow(x,2) + std::pow(y,2));
 
-    std::cout << " Displacement in XY: " << eucledian_error << " m " << std::endl;
+//     std::cout << " Displacement in XY: " << eucledian_error << " m " << std::endl;
 
-    std::cout << " Error :  -- X : " << x
-            << " -- Y : " << y <<
-            " -- Z : " << z << 
-            std::endl;
+//     std::cout << " Error :  -- X : " << x
+//             << " -- Y : " << y <<
+//             " -- Z : " << z << 
+//             std::endl;
 
-    //std::cout << "----------" << std::endl;
+//     //std::cout << "----------" << std::endl;
 
-};
+// };
 
-void rover_corrected_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
-{
-    GeographicLib::LocalCartesian locart(0, 0, 0, earth);
+// void rover_corrected_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
+// {
+//     GeographicLib::LocalCartesian locart(0, 0, 0, earth);
 
-    locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
+//     locart.Forward(msg->latitude, msg->longitude, msg->altitude, x, y, z);
 
-    // std::cout << " Rover Corrected :  -- X : " << x
-    //         << " -- Y : " << y <<
-    //         " -- Z : " << z << 
-    //         std::endl;
+//     // std::cout << " Rover Corrected :  -- X : " << x
+//     //         << " -- Y : " << y <<
+//     //         " -- Z : " << z << 
+//     //         std::endl;
 
-    //std::cout << "----------" << std::endl;
+//     //std::cout << "----------" << std::endl;
 
-};
+// };
+
+
+
+
 
 
 void gps_odometry_publisher_callback(const sensor_msgs::NavSatFix::ConstPtr& msg)
@@ -117,6 +130,12 @@ void gps_odometry_vel_publisher_callback(const geometry_msgs::TwistWithCovarianc
 }
 
 
+void imu_odometry_callback(const nav_msgs::Odometry::ConstPtr& msg)
+{
+
+}
+
+
 int main(int argc, char **argv)
 {
 
@@ -134,6 +153,7 @@ int main(int argc, char **argv)
     // ros::Subscriber rover_corrected_sub = n.subscribe("/gnss/rover/fix_corrected", 1000, rover_corrected_callback);
     ros::Subscriber gps_odometry_sub = n.subscribe("/ublox_gps/fix", 1000, gps_odometry_publisher_callback);
     ros::Subscriber gps_odometry_vel_sub = n.subscribe("/ublox_gps/fix_velocity", 1000, gps_odometry_vel_publisher_callback);
+    ros::Subscriber imu_odometry_sub = n.subscribe("/odometry/imu", 1000, imu_odometry_callback);
 
     ros::spin();
 
